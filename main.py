@@ -24,7 +24,7 @@ scene = gs.Scene(
 #     )
 # hand_link_name = "panda_hand"
 franka = scene.add_entity(
-        gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml"),
+        gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml", pos=(0.0, 0.0, 0.1)),
         material=gs.materials.Rigid(coup_friction=1.0),
     )
 hand_link_name = "hand"
@@ -33,7 +33,9 @@ plane = scene.add_entity(
         gs.morphs.Plane(),
     )
 
-t_shape = scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=(0.75, -0.05, 0.0), scale=0.5))
+t_shape = scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=(0.75, -0.05, 0.1), scale=0.5), surface=gs.surfaces.Default(color=(0.6, 0.7, 0.8)))
+marker = scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=(0.45, -0.05, 0.051), quat=(1, 0, 0, 1), scale=0.5, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 0.0, 0.0)))
+table = scene.add_entity(gs.morphs.Box(size=(2.0, 2.0, 0.1), pos=(0.0, 0.0, 0.05), fixed=True), material=gs.materials.Rigid(friction=1.0), surface=gs.surfaces.Default(color=(0.8, 0.7, 0.6)))
 
 scene.build()
 
@@ -59,7 +61,7 @@ if True:
     # move to pre-grasp pose
     qpos = franka.inverse_kinematics(
         link=end_effector,
-        pos=np.array([0.64, 0.0, 0.135]),
+        pos=np.array([0.64, 0.0, 0.235]),
         quat=np.array([0, 1, 0, 0]),
     )
     qpos[-2:] = 0.03
@@ -78,7 +80,7 @@ if True:
     for i in range(300):
         qpos = franka.inverse_kinematics(
             link=end_effector,
-            pos=np.array([0.64 + 0.0005 * i, 0.0, 0.135]),
+            pos=np.array([0.64 + 0.0005 * i, 0.0, 0.235]),
             quat=np.array([0, 1, 0, 0]),
         )
         franka.control_dofs_position(qpos[:-2], motors_dof)
