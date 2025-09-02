@@ -1,6 +1,8 @@
+import os
 import numpy as np
 import genesis as gs
 import argparse
+import json
 
 def quat_geodesic_angle(q1, q2):
     q1 = q1 / np.linalg.norm(q1)
@@ -54,7 +56,7 @@ def quat_to_rotmat(q):
     return R
 
 class TaskEnv:
-    def __init__(self):
+    def __init__(self, seed = 0):
         gs.init(backend=gs.gpu)
 
         self.scene = gs.Scene(
@@ -90,7 +92,15 @@ class TaskEnv:
         self.targ_quat = np.array([1.0, 0.0, 0.0, 1.0])
         self.targ_quat /= np.linalg.norm(self.targ_quat)
 
-        self.t_shape = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=(0.65, -0.05, 0.1), scale=0.5), surface=gs.surfaces.Default(color=(0.6, 0.7, 0.8)))
+
+        # sample from poffset from [-0.2, 0.2]^2 and quat_offset from [-1, 1]^2
+        self.seed = seed
+        np.random.seed(seed)
+        poffset = np.random.uniform(-0.1, 0.1, size=(2,))
+        quat_offset = np.random.uniform(-1, 1, size=(2,))
+        quat_offset /= np.linalg.norm(quat_offset)
+
+        self.t_shape = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=np.array([0.65, -0.05, 0.1]) + np.array([poffset[0], poffset[1], 0.0]), quat=np.array([quat_offset[0], 0.0, 0.0, quat_offset[1]]), scale=0.5), surface=gs.surfaces.Default(color=(0.6, 0.7, 0.8)))
         self.marker = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=self.targ_pos - np.asarray([0.0, 0.0, 0.049]), quat=self.targ_quat, scale=0.5, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 0.0, 0.0)))
         self.table = self.scene.add_entity(gs.morphs.Box(size=(2.0, 2.0, 0.1), pos=(0.0, 0.0, 0.05), fixed=True), material=gs.materials.Rigid(friction=1.0), surface=gs.surfaces.Default(color=(0.8, 0.7, 0.6)))
 
@@ -109,6 +119,21 @@ class TaskEnv:
             np.array([-0.05, 0.075, 0.025]),
         ]
 
+        self.key_point_normals = [
+            np.array([0.0, 1.0, 0.0]),
+            np.array([0.0, 1.0, 0.0]),
+            np.array([1.0, 0.0, 0.0]),
+            np.array([0.0, -1.0, 0.0]),
+            np.array([1.0, 0.0, 0.0]),
+            np.array([1.0, 0.0, 0.0]),
+            np.array([0.0, -1.0, 0.0]),
+            np.array([-1.0, 0.0, 0.0]),
+            np.array([-1.0, 0.0, 0.0]),
+            np.array([0.0, -1.0, 0.0]),
+            np.array([-1.0, 0.0, 0.0]),
+            np.array([0.0, 1.0, 0.0]),
+        ]
+
         self.key_points = [
             self.scene.add_entity(gs.morphs.Sphere(radius=0.01, collision=False, fixed=True), surface=gs.surfaces.Default(color=(0.0, 1.0, 0.0), opacity=0.5)) for kp in self.key_point_poses
         ]
@@ -117,6 +142,18 @@ class TaskEnv:
             self.scene.add_entity(gs.morphs.Sphere(radius=0.01, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 0.0, 0.0), opacity=0.5)) for kp in self.key_point_poses
         ]
         self.targ_point = self.scene.add_entity(gs.morphs.Sphere(radius=0.1, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 1.0, 0.0), opacity=0.5))
+
+        self.hand_cam = self.scene.add_camera(GUI=False, fov=70, res=(320, 320))
+        self.scene_cam = self.scene.add_camera(GUI=False, fov=40, res=(320, 320), pos=(2, 0, 1.5), lookat=(0.0, 0.0, 0.0))
+        self.cams = [self.hand_cam, self.scene_cam]
+        T = np.eye(4)
+        T[:3, :3] = np.array([
+            [1,  0,  0],
+            [0, -1,  0],
+            [0,  0, -1]
+        ])
+        T[:3, 3] = np.array([0.1, 0.0, 0.1])
+        self.hand_cam.attach(self.franka.get_link("hand"), T)
 
         self.scene.build()
 
@@ -153,6 +190,10 @@ class TaskEnv:
         self.franka.control_dofs_force(np.array([-1, -1]), self.fingers_dof)
         # franka.control_dofs_position(np.array([0, 0]), fingers_dof) # you can also use position control
 
+        self.end_targs = []
+        self.qposes = []
+        self.qvels = []
+
     def combined_dist(dpos, dquat):
         return dpos * dpos * 100 + dquat * dquat
 
@@ -178,12 +219,28 @@ class TaskEnv:
             self.key_points[i].set_pos(self.t_shape.get_pos().cpu().numpy() + R @ self.key_point_poses[i])
             self.targ_key_points[i].set_pos(self.targ_pos + targ_R @ self.key_point_poses[i])
         self.targ_point.set_pos(self.end_targ_pos)
+
         self.scene.step()
         r = self.targ_dist()
         print("targ dist:", r)
+        for cam in self.cams:
+            cam.render()
+        self.end_targs.append(self.end_targ_pos.copy())
+        self.qposes.append(self.franka.get_dofs_position().cpu().numpy())
+        self.qvels.append(self.franka.get_dofs_velocity().cpu().numpy())
         return r
+    
+    def got_contact(self):
+        contacts = self.franka.get_contacts(self.t_shape)
+        contact_position = contacts["position"].cpu().numpy()
+        # check whether contact_position is empty
+        is_contact = contact_position.size > 0
+        return is_contact
+
 
     def run(self):
+        for cam in self.cams:
+            cam.start_recording()
         for i in range(100):
             self.step()
 
@@ -192,26 +249,29 @@ class TaskEnv:
         stage_step = 0
         last_dpos, last_dquat = self.targ_dist()
 
+        contact_step_count = 0
+
         # lift
         while last_dpos > 0.005 or last_dquat > 0.05:
             if stage == 0:
                 tpos = self.t_shape.get_pos().cpu().numpy()
                 R = quat_to_rotmat(self.t_shape.get_quat().cpu().numpy())
                 targ_R = quat_to_rotmat(self.targ_quat)
-                targ_dist = -1.0
+                targ_dist = -10000.0
                 sel_targ_key_pos = None
                 sel_cur_key_pos = None
                 for i in range(12):
                     cur_key_pos = tpos + R @ self.key_point_poses[i]
                     targ_key_pos = self.targ_pos + targ_R @ self.key_point_poses[i]
-                    dist = np.linalg.norm(cur_key_pos - targ_key_pos)
+                    normal = R @ self.key_point_normals[i]
+                    dist = np.dot(cur_key_pos - targ_key_pos, normal)
                     if dist > targ_dist:
                         targ_dist = dist
                         sel_targ_key_pos = targ_key_pos
                         sel_cur_key_pos = cur_key_pos
                 self.push_direction = sel_targ_key_pos - sel_cur_key_pos
                 self.push_direction /= np.linalg.norm(self.push_direction)
-                start_point = sel_cur_key_pos - 0.05 * self.push_direction
+                start_point = sel_cur_key_pos - 0.06 * self.push_direction
                 start_point[2] = 0.3
                 print(f"start_point: {start_point}")
                 self.end_targ_pos = start_point
@@ -226,8 +286,11 @@ class TaskEnv:
                 if stage_step == 50:
                     stage = 3
                     stage_step = 0
+                    contact_step_count = 0
             elif stage == 3:
-                if self.reward() < 1.0:
+                if self.reward() < 0.1 and stage_step > 13:
+                    self.end_targ_pos += 0.0003 * self.push_direction
+                elif self.reward() < 1.0 and stage_step > 13:
                     self.end_targ_pos += 0.001 * self.push_direction
                 else:
                     self.end_targ_pos += 0.005 * self.push_direction
@@ -246,21 +309,61 @@ class TaskEnv:
             stage_step += 1
 
             new_dpos, new_dquat = self.targ_dist()
-            if stage == 3 and stage_step > 30 and TaskEnv.combined_dist(new_dpos, new_dquat) >= TaskEnv.combined_dist(last_dpos, last_dquat):
+
+            step_threshold = 50
+            if self.reward() < 0.2:
+                step_threshold = 200
+            elif self.reward() < 1.0:
+                step_threshold = 100
+            if self.got_contact():
+              contact_step_count += 1
+            if stage == 3 and (contact_step_count > 3) and (stage_step > 25) and TaskEnv.combined_dist(new_dpos, new_dquat) >= TaskEnv.combined_dist(last_dpos - 0.0001, last_dquat):
                 self.end_targ_pos[2] = 0.3
                 self.end_targ_pos -= self.push_direction * 0.03
                 stage = 4
                 stage_step = 0
+                contact_step_count = 0
+
+
 
             last_dpos, last_dquat = new_dpos, new_dquat
             print(f"stage: {stage}, step: {stage_step}, reward: {self.reward()}")
 
+
+        self.end_targ_pos[2] = 0.3
+        self.end_targ_pos -= self.push_direction * 0.1
+
         for i in range(100):
+            qpos = self.franka.inverse_kinematics(
+                link=self.end_effector,
+                pos=self.end_targ_pos,
+                quat=np.array([0, 1, 0, 0]),
+            )
+            self.franka.control_dofs_position(qpos[:-2], self.motors_dof)
             self.step()
 
+        self.hand_cam.stop_recording(f"data/hand_record{self.seed}.mp4")
+        self.scene_cam.stop_recording(f"data/scene_record{self.seed}.mp4")
+
+        # make all arrays python list
+        self.qposes = [qpos.tolist() for qpos in self.qposes]
+        self.qvels = [qvel.tolist() for qvel in self.qvels]
+        self.end_targs = [end_targ.tolist() for end_targ in self.end_targs]
+
+        data_dict = {
+            "qpos": self.qposes,
+            "qvel": self.qvels,
+            "end_targ": self.end_targs
+        }
+
+        # save to episode.json
+        with open(f"data/episode{self.seed}.json", "w") as f:
+            json.dump(data_dict, f)
 
 def main():
-    env = TaskEnv()
+    # make dir data/ is not exists
+    os.makedirs("data/", exist_ok=True)
+    env = TaskEnv(0)
     env.run()
 
 if __name__ == "__main__":
