@@ -56,7 +56,8 @@ def quat_to_rotmat(q):
     return R
 
 class TaskEnv:
-    def __init__(self, seed = 0):
+    def __init__(self, seed = 0, debug_mode=True):
+        self.debug_mode = debug_mode
         gs.init(backend=gs.gpu)
 
         self.scene = gs.Scene(
@@ -88,7 +89,7 @@ class TaskEnv:
                 gs.morphs.Plane(),
             )
         
-        self.targ_pos = np.array([0.45, -0.05, 0.1])
+        self.targ_pos = np.array([0.5, -0.05, 0.1])
         self.targ_quat = np.array([1.0, 0.0, 0.0, 1.0])
         self.targ_quat /= np.linalg.norm(self.targ_quat)
 
@@ -100,7 +101,7 @@ class TaskEnv:
         quat_offset = np.random.uniform(-1, 1, size=(2,))
         quat_offset /= np.linalg.norm(quat_offset)
 
-        self.t_shape = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=np.array([0.65, -0.05, 0.1]) + np.array([poffset[0], poffset[1], 0.0]), quat=np.array([quat_offset[0], 0.0, 0.0, quat_offset[1]]), scale=0.5), surface=gs.surfaces.Default(color=(0.6, 0.7, 0.8)))
+        self.t_shape = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=np.array([0.55, -0.05, 0.1]) + np.array([poffset[0] * 0.5, poffset[1], 0.0]), quat=np.array([quat_offset[0], 0.0, 0.0, quat_offset[1]]), scale=0.5), surface=gs.surfaces.Default(color=(0.6, 0.7, 0.8)))
         self.marker = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=self.targ_pos - np.asarray([0.0, 0.0, 0.049]), quat=self.targ_quat, scale=0.5, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 0.0, 0.0)))
         self.table = self.scene.add_entity(gs.morphs.Box(size=(2.0, 2.0, 0.1), pos=(0.0, 0.0, 0.05), fixed=True), material=gs.materials.Rigid(friction=1.0), surface=gs.surfaces.Default(color=(0.8, 0.7, 0.6)))
 
@@ -123,25 +124,28 @@ class TaskEnv:
             np.array([0.0, 1.0, 0.0]),
             np.array([0.0, 1.0, 0.0]),
             np.array([1.0, 0.0, 0.0]),
-            np.array([0.0, -1.0, 0.0]),
-            np.array([1.0, 0.0, 0.0]),
+            np.array([1.0, -1.0, 0.0]),
+            np.array([1.0, -1.0, 0.0]),
             np.array([1.0, 0.0, 0.0]),
             np.array([0.0, -1.0, 0.0]),
             np.array([-1.0, 0.0, 0.0]),
-            np.array([-1.0, 0.0, 0.0]),
-            np.array([0.0, -1.0, 0.0]),
+            np.array([-1.0, -1.0, 0.0]),
+            np.array([-1.0, -1.0, 0.0]),
             np.array([-1.0, 0.0, 0.0]),
             np.array([0.0, 1.0, 0.0]),
         ]
+        for key_point_normals in self.key_point_normals:
+            key_point_normals /= np.linalg.norm(key_point_normals)
 
-        self.key_points = [
-            self.scene.add_entity(gs.morphs.Sphere(radius=0.01, collision=False, fixed=True), surface=gs.surfaces.Default(color=(0.0, 1.0, 0.0), opacity=0.5)) for kp in self.key_point_poses
-        ]
+        if self.debug_mode:
+            self.key_points = [
+                self.scene.add_entity(gs.morphs.Sphere(radius=0.01, collision=False, fixed=True), surface=gs.surfaces.Default(color=(0.0, 1.0, 0.0), opacity=0.5)) for kp in self.key_point_poses
+            ]
 
-        self.targ_key_points = [
-            self.scene.add_entity(gs.morphs.Sphere(radius=0.01, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 0.0, 0.0), opacity=0.5)) for kp in self.key_point_poses
-        ]
-        self.targ_point = self.scene.add_entity(gs.morphs.Sphere(radius=0.1, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 1.0, 0.0), opacity=0.5))
+            self.targ_key_points = [
+                self.scene.add_entity(gs.morphs.Sphere(radius=0.01, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 0.0, 0.0), opacity=0.5)) for kp in self.key_point_poses
+            ]
+            self.targ_point = self.scene.add_entity(gs.morphs.Sphere(radius=0.1, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 1.0, 0.0), opacity=0.5))
 
         self.hand_cam = self.scene.add_camera(GUI=False, fov=70, res=(320, 320))
         self.scene_cam = self.scene.add_camera(GUI=False, fov=40, res=(320, 320), pos=(2, 0, 1.5), lookat=(0.0, 0.0, 0.0))
@@ -215,10 +219,11 @@ class TaskEnv:
         # get R from t_shape.get_quat with numpy functions
         R = quat_to_rotmat(self.t_shape.get_quat().cpu().numpy())
         targ_R = quat_to_rotmat(self.targ_quat)
-        for i in range(12):
-            self.key_points[i].set_pos(self.t_shape.get_pos().cpu().numpy() + R @ self.key_point_poses[i])
-            self.targ_key_points[i].set_pos(self.targ_pos + targ_R @ self.key_point_poses[i])
-        self.targ_point.set_pos(self.end_targ_pos)
+        if self.debug_mode:
+            for i in range(12):
+                self.key_points[i].set_pos(self.t_shape.get_pos().cpu().numpy() + R @ self.key_point_poses[i])
+                self.targ_key_points[i].set_pos(self.targ_pos + targ_R @ self.key_point_poses[i])
+            self.targ_point.set_pos(self.end_targ_pos)
 
         self.scene.step()
         r = self.targ_dist()
@@ -241,7 +246,7 @@ class TaskEnv:
     def run(self):
         for cam in self.cams:
             cam.start_recording()
-        for i in range(100):
+        for i in range(30):
             self.step()
 
         i = 0
@@ -333,7 +338,7 @@ class TaskEnv:
         self.end_targ_pos[2] = 0.3
         self.end_targ_pos -= self.push_direction * 0.1
 
-        for i in range(100):
+        for i in range(50):
             qpos = self.franka.inverse_kinematics(
                 link=self.end_effector,
                 pos=self.end_targ_pos,
@@ -363,7 +368,7 @@ class TaskEnv:
 def main():
     # make dir data/ is not exists
     os.makedirs("data/", exist_ok=True)
-    env = TaskEnv(0)
+    env = TaskEnv(seed=13, debug_mode=False)
     env.run()
 
 if __name__ == "__main__":
