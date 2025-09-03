@@ -56,9 +56,8 @@ def quat_to_rotmat(q):
     return R
 
 class TaskEnv:
-    def __init__(self, seed = 0, debug_mode=True):
+    def __init__(self, debug_mode=True):
         self.debug_mode = debug_mode
-        gs.init(backend=gs.gpu)
 
         self.scene = gs.Scene(
                 sim_options=gs.options.SimOptions(
@@ -95,13 +94,8 @@ class TaskEnv:
 
 
         # sample from poffset from [-0.2, 0.2]^2 and quat_offset from [-1, 1]^2
-        self.seed = seed
-        np.random.seed(seed)
-        poffset = np.random.uniform(-0.1, 0.1, size=(2,))
-        quat_offset = np.random.uniform(-1, 1, size=(2,))
-        quat_offset /= np.linalg.norm(quat_offset)
 
-        self.t_shape = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=np.array([0.55, -0.05, 0.1]) + np.array([poffset[0] * 0.5, poffset[1], 0.0]), quat=np.array([quat_offset[0], 0.0, 0.0, quat_offset[1]]), scale=0.5), surface=gs.surfaces.Default(color=(0.6, 0.7, 0.8)))
+        self.t_shape = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=np.array([0.55, -0.05, 0.1]), quat=np.array([1.0, 0.0, 0.0, 0.0]), scale=0.5), surface=gs.surfaces.Default(color=(0.6, 0.7, 0.8)))
         self.marker = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=self.targ_pos - np.asarray([0.0, 0.0, 0.049]), quat=self.targ_quat, scale=0.5, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 0.0, 0.0)))
         self.table = self.scene.add_entity(gs.morphs.Box(size=(2.0, 2.0, 0.1), pos=(0.0, 0.0, 0.05), fixed=True), material=gs.materials.Rigid(friction=1.0), surface=gs.surfaces.Default(color=(0.8, 0.7, 0.6)))
 
@@ -176,6 +170,21 @@ class TaskEnv:
             np.array([87, 87, 87, 87, 12, 12, 12, 100, 100]),
         )
 
+        # franka.control_dofs_position(np.array([0, 0]), fingers_dof) # you can also use position control
+
+
+    def reset_by_seed(self, seed):
+        self.seed = seed
+        np.random.seed(seed)
+        poffset = np.random.uniform(-0.1, 0.1, size=(2,))
+        quat_offset = np.random.uniform(-1, 1, size=(2,))
+        quat_offset /= np.linalg.norm(quat_offset)
+
+        pos=np.array([0.55, -0.05, 0.1]) + np.array([poffset[0] * 0.5, poffset[1], 0.0])
+        quat=np.array([quat_offset[0], 0.0, 0.0, quat_offset[1]])
+
+        self.t_shape.set_pos(pos)
+        self.t_shape.set_quat(quat)
         self.end_targ_pos = np.array([0.45, 0.0, 0.3])
 
         self.end_effector = self.franka.get_link(self.hand_link_name)
@@ -192,8 +201,7 @@ class TaskEnv:
         # grasp with 1N force
         self.franka.control_dofs_position(qpos[:-2], self.motors_dof)
         self.franka.control_dofs_force(np.array([-1, -1]), self.fingers_dof)
-        # franka.control_dofs_position(np.array([0, 0]), fingers_dof) # you can also use position control
-
+        
         self.end_targs = []
         self.qposes = []
         self.qvels = []
@@ -243,7 +251,8 @@ class TaskEnv:
         return is_contact
 
 
-    def run(self):
+    def run(self, seed=0):
+        self.reset_by_seed(seed)
         for cam in self.cams:
             cam.start_recording()
         for i in range(30):
@@ -368,8 +377,10 @@ class TaskEnv:
 def main():
     # make dir data/ is not exists
     os.makedirs("data/", exist_ok=True)
-    env = TaskEnv(seed=13, debug_mode=False)
-    env.run()
+    gs.init(backend=gs.gpu)
+    env = TaskEnv(debug_mode=False)
+    for seed in range(100):
+        env.run(seed=seed)
 
 if __name__ == "__main__":
     main()
