@@ -55,20 +55,96 @@ def quat_to_rotmat(q):
 
     return R
 
+def rotation_to_quaternion(R):
+    R = np.asarray(R, dtype=float)
+    tr = np.trace(R)
+    if tr > 0:
+        S = np.sqrt(tr + 1.0) * 2
+        w = 0.25 * S
+        x = (R[2,1] - R[1,2]) / S
+        y = (R[0,2] - R[2,0]) / S
+        z = (R[1,0] - R[0,1]) / S
+    else:
+        if R[0,0] > R[1,1] and R[0,0] > R[2,2]:
+            S = np.sqrt(1.0 + R[0,0] - R[1,1] - R[2,2]) * 2
+            w = (R[2,1] - R[1,2]) / S
+            x = 0.25 * S
+            y = (R[0,1] + R[1,0]) / S
+            z = (R[0,2] + R[2,0]) / S
+        elif R[1,1] > R[2,2]:
+            S = np.sqrt(1.0 - R[0,0] + R[1,1] - R[2,2]) * 2
+            w = (R[0,2] - R[2,0]) / S
+            x = (R[0,1] + R[1,0]) / S
+            y = 0.25 * S
+            z = (R[1,2] + R[2,1]) / S
+        else:
+            S = np.sqrt(1.0 - R[0,0] - R[1,1] + R[2,2]) * 2
+            w = (R[1,0] - R[0,1]) / S
+            x = (R[0,2] + R[2,0]) / S
+            y = (R[1,2] + R[2,1]) / S
+            z = 0.25 * S
+    q = np.array([w, x, y, z])
+    q /= np.linalg.norm(q)
+    return q
+
+def recover_pos_quat(P, Q):
+    P = np.asarray(P)
+    Q = np.asarray(Q)
+    assert P.shape == Q.shape
+    assert P.shape[1] == 3
+
+    N = P.shape[0]
+
+    centroid_P = np.mean(P, axis=0)
+    centroid_Q = np.mean(Q, axis=0)
+
+    P_centered = P - centroid_P
+    Q_centered = Q - centroid_Q
+
+    H = P_centered.T @ Q_centered
+
+    U, S, Vt = np.linalg.svd(H)
+    R = Vt.T @ U.T
+
+    if np.linalg.det(R) < 0:
+        Vt[2, :] *= -1
+        R = Vt.T @ U.T
+
+    t = centroid_Q - R @ centroid_P
+
+    return t, rotation_to_quaternion(R)
+
 class TaskEnv:
-    def __init__(self, debug_mode=True):
+    def __init__(self, debug_mode=True, material="rigid"):
+        self.data_dir = f"data/{material}"
+        os.makedirs(self.data_dir, exist_ok=True)
         self.debug_mode = debug_mode
+        self.material = material
 
         self.scene = gs.Scene(
                 sim_options=gs.options.SimOptions(
                     dt=5e-3,
-                    substeps=15,
+                    substeps=50,
+                ),
+                vis_options=gs.options.VisOptions(
+                    visualize_mpm_boundary=self.debug_mode
                 ),
                 viewer_options=gs.options.ViewerOptions(
                     camera_pos=(3, -1, 1.5),
                     camera_lookat=(0.0, 0.0, 0.0),
                     camera_fov=30,
                     max_FPS=60,
+                ),
+                mpm_options=gs.options.MPMOptions(
+                    lower_bound=(0.0, -0.5, 0.0),
+                    upper_bound=(1.0, 0.5, 1.0),
+                ),
+                fem_options=gs.options.FEMOptions(
+                    use_implicit_solver=False,
+                    damping=3.0
+                ),
+                pbd_options=gs.options.PBDOptions(
+                    particle_size=0.003,
                 ),
                 show_viewer=True
             )
@@ -94,10 +170,32 @@ class TaskEnv:
 
 
         # sample from poffset from [-0.2, 0.2]^2 and quat_offset from [-1, 1]^2
+        self.t_init_pos = np.array([0.55, -0.05, 0.101])
+        self.t_init_quat = np.array([1.0, 0.0, 0.0, 0.0])
 
-        self.t_shape = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=np.array([0.55, -0.05, 0.1]), quat=np.array([1.0, 0.0, 0.0, 0.0]), scale=0.5), surface=gs.surfaces.Default(color=(0.6, 0.7, 0.8)))
+        table_material = gs.materials.Rigid(friction=1.0)
+        self.next_round_wait_step = 50
+        if self.material == "rigid":
+            material = None
+        elif self.material == "mpm":
+            material = gs.materials.MPM.Elastic(rho=200)
+        elif self.material == "fem":
+            material = gs.materials.FEM.Elastic(
+                E=1.0e5,  # stiffness
+                nu=0.45,  # compressibility (0 to 0.5)
+                rho=200.0,  # density
+                friction_mu=3.0,
+                hydroelastic_modulus=1e8,
+                model="stable_neohookean")
+        elif self.material == "pbd":
+            material = gs.materials.PBD.Elastic(rho=200, kinetic_friction=1.0, static_friction=1.0)
+
+        self.t_shape = self.scene.add_entity(
+            gs.morphs.Mesh(force_retet=True, file="T-shape-modified-merged.obj", pos=self.t_init_pos, quat=self.t_init_quat, scale=0.5), surface=gs.surfaces.Default(color=(0.6, 0.7, 0.8)),
+            material=material
+        )
         self.marker = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=self.targ_pos - np.asarray([0.0, 0.0, 0.049]), quat=self.targ_quat, scale=0.5, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 0.0, 0.0)))
-        self.table = self.scene.add_entity(gs.morphs.Box(size=(2.0, 2.0, 0.1), pos=(0.0, 0.0, 0.05), fixed=True), material=gs.materials.Rigid(friction=1.0), surface=gs.surfaces.Default(color=(0.8, 0.7, 0.6)))
+        self.table = self.scene.add_entity(gs.morphs.Box(size=(2.0, 2.0, 0.1), pos=(0.0, 0.0, 0.05), fixed=True), material=table_material, surface=gs.surfaces.Default(color=(0.8, 0.7, 0.6)))
 
         self.key_point_poses = [
             np.array([0.0, 0.075, 0.025]),
@@ -172,6 +270,53 @@ class TaskEnv:
 
         # franka.control_dofs_position(np.array([0, 0]), fingers_dof) # you can also use position control
 
+    def set_pos_quat(self, pos, quat):
+        self.scene.reset()
+        
+        self.t_pos = pos
+        self.t_quat = quat
+
+        if self.material == "rigid":
+            self.t_shape.set_pos(pos)
+            self.t_shape.set_quat(quat)
+        elif self.material == "mpm":
+            relative_particles = self.t_shape.get_particles() - self.t_init_pos
+            self.P = relative_particles[0]
+            R = quat_to_rotmat(quat)
+            relative_particles = relative_particles.swapaxes(1, 2)
+            relative_particles = R @ relative_particles
+            relative_particles = relative_particles.swapaxes(1, 2)
+            new_particles = relative_particles + pos
+            self.t_shape.set_pos(0, new_particles)
+        elif self.material == "fem":
+            relative_particles = self.t_shape.get_state().pos.cpu().numpy() - self.t_init_pos
+            # print(f"positions: ", relative_particles)
+            self.P = relative_particles[0]
+            R = quat_to_rotmat(quat)
+            relative_particles = relative_particles.swapaxes(1, 2)
+            relative_particles = R @ relative_particles
+            relative_particles = relative_particles.swapaxes(1, 2)
+            new_particles = relative_particles + pos
+            new_particles = np.ascontiguousarray(new_particles)
+            self.t_shape.set_position(new_particles)
+        elif self.material == "pbd":
+            scene_state = self.scene.get_state()
+            print("PBD Scene State: ", scene_state.solvers_state[5])
+
+
+    def get_pos_quat(self):
+        if self.material == "rigid":
+            return self.t_shape.get_pos().cpu().numpy(), self.t_shape.get_quat().cpu().numpy()
+        elif self.material == "mpm":
+            Q = self.t_shape.get_particles()[0]
+            t, q = recover_pos_quat(self.P, Q)
+            return t, q
+        elif self.material == "fem":
+            Q = self.t_shape.get_state().pos.cpu().numpy()[0]
+            t, q = recover_pos_quat(self.P, Q)
+            return t, q
+        return self.t_pos, self.t_quat
+
 
     def reset_by_seed(self, seed):
         self.seed = seed
@@ -183,8 +328,8 @@ class TaskEnv:
         pos=np.array([0.55, -0.05, 0.1]) + np.array([poffset[0] * 0.5, poffset[1], 0.0])
         quat=np.array([quat_offset[0], 0.0, 0.0, quat_offset[1]])
 
-        self.t_shape.set_pos(pos)
-        self.t_shape.set_quat(quat)
+        self.set_pos_quat(pos, quat)
+
         self.end_targ_pos = np.array([0.45, 0.0, 0.3])
 
         self.end_effector = self.franka.get_link(self.hand_link_name)
@@ -213,8 +358,7 @@ class TaskEnv:
         pos=self.targ_pos
         quat=self.targ_quat
 
-        tpos = self.t_shape.get_pos().cpu().numpy()
-        tquat = self.t_shape.get_quat().cpu().numpy()
+        tpos, tquat = self.get_pos_quat()
         dpos = np.linalg.norm(pos - tpos)
         dquat = quat_geodesic_angle(quat, tquat)
         return dpos, dquat
@@ -225,11 +369,12 @@ class TaskEnv:
 
     def step(self):
         # get R from t_shape.get_quat with numpy functions
-        R = quat_to_rotmat(self.t_shape.get_quat().cpu().numpy())
+        tpos, tquat = self.get_pos_quat()
+        R = quat_to_rotmat(tquat)
         targ_R = quat_to_rotmat(self.targ_quat)
         if self.debug_mode:
             for i in range(12):
-                self.key_points[i].set_pos(self.t_shape.get_pos().cpu().numpy() + R @ self.key_point_poses[i])
+                self.key_points[i].set_pos(tpos + R @ self.key_point_poses[i])
                 self.targ_key_points[i].set_pos(self.targ_pos + targ_R @ self.key_point_poses[i])
             self.targ_point.set_pos(self.end_targ_pos)
 
@@ -242,14 +387,6 @@ class TaskEnv:
         self.qposes.append(self.franka.get_dofs_position().cpu().numpy())
         self.qvels.append(self.franka.get_dofs_velocity().cpu().numpy())
         return r
-    
-    def got_contact(self):
-        contacts = self.franka.get_contacts(self.t_shape)
-        contact_position = contacts["position"].cpu().numpy()
-        # check whether contact_position is empty
-        is_contact = contact_position.size > 0
-        return is_contact
-
 
     def run(self, seed=0):
         self.reset_by_seed(seed)
@@ -262,14 +399,15 @@ class TaskEnv:
         stage = 0
         stage_step = 0
         last_dpos, last_dquat = self.targ_dist()
+        initial_combined_dist = 0.0
 
         contact_step_count = 0
 
         # lift
         while last_dpos > 0.005 or last_dquat > 0.05:
             if stage == 0:
-                tpos = self.t_shape.get_pos().cpu().numpy()
-                R = quat_to_rotmat(self.t_shape.get_quat().cpu().numpy())
+                tpos, tquat = self.get_pos_quat()
+                R = quat_to_rotmat(tquat)
                 targ_R = quat_to_rotmat(self.targ_quat)
                 targ_dist = -10000.0
                 sel_targ_key_pos = None
@@ -301,6 +439,7 @@ class TaskEnv:
                     stage = 3
                     stage_step = 0
                     contact_step_count = 0
+                    initial_combined_dist = TaskEnv.combined_dist(last_dpos, last_dquat)
             elif stage == 3:
                 if self.reward() < 0.1 and stage_step > 13:
                     self.end_targ_pos += 0.0003 * self.push_direction
@@ -309,7 +448,7 @@ class TaskEnv:
                 else:
                     self.end_targ_pos += 0.005 * self.push_direction
             elif stage == 4:
-                if stage_step == 50:
+                if stage_step == self.next_round_wait_step:
                     stage = 0
                     stage_step = 0
             qpos = self.franka.inverse_kinematics(
@@ -323,15 +462,16 @@ class TaskEnv:
             stage_step += 1
 
             new_dpos, new_dquat = self.targ_dist()
+            new_combined_score = TaskEnv.combined_dist(new_dpos, new_dquat)
 
             step_threshold = 50
             if self.reward() < 0.2:
                 step_threshold = 200
             elif self.reward() < 1.0:
                 step_threshold = 100
-            if self.got_contact():
+            if abs(initial_combined_dist - new_combined_score) > 0.00001:
               contact_step_count += 1
-            if stage == 3 and (contact_step_count > 3) and (stage_step > 25) and TaskEnv.combined_dist(new_dpos, new_dquat) >= TaskEnv.combined_dist(last_dpos - 0.0001, last_dquat):
+            if stage == 3 and (contact_step_count > 3) and (stage_step > 25) and new_combined_score >= TaskEnv.combined_dist(last_dpos - 0.0001, last_dquat):
                 self.end_targ_pos[2] = 0.3
                 self.end_targ_pos -= self.push_direction * 0.03
                 stage = 4
@@ -356,8 +496,8 @@ class TaskEnv:
             self.franka.control_dofs_position(qpos[:-2], self.motors_dof)
             self.step()
 
-        self.hand_cam.stop_recording(f"data/hand_record{self.seed}.mp4")
-        self.scene_cam.stop_recording(f"data/scene_record{self.seed}.mp4")
+        self.hand_cam.stop_recording(f"{self.data_dir}/hand_record{self.seed}.mp4")
+        self.scene_cam.stop_recording(f"{self.data_dir}/scene_record{self.seed}.mp4")
 
         # make all arrays python list
         self.qposes = [qpos.tolist() for qpos in self.qposes]
@@ -371,14 +511,13 @@ class TaskEnv:
         }
 
         # save to episode.json
-        with open(f"data/episode{self.seed}.json", "w") as f:
+        with open(f"{self.data_dir}/episode{self.seed}.json", "w") as f:
             json.dump(data_dict, f)
 
 def main():
     # make dir data/ is not exists
-    os.makedirs("data/", exist_ok=True)
     gs.init(backend=gs.gpu)
-    env = TaskEnv(debug_mode=False)
+    env = TaskEnv(debug_mode=False, material="mpm")
     for seed in range(100):
         env.run(seed=seed)
 
