@@ -191,7 +191,7 @@ class TaskEnv:
             material = gs.materials.PBD.Elastic(rho=200, kinetic_friction=1.0, static_friction=1.0)
 
         self.t_shape = self.scene.add_entity(
-            gs.morphs.Mesh(force_retet=True, file="T-shape-modified-merged.obj", pos=self.t_init_pos, quat=self.t_init_quat, scale=0.5), surface=gs.surfaces.Default(color=(0.6, 0.7, 0.8)),
+            gs.morphs.Mesh(force_retet=True, file="T-shape-modified.obj", pos=self.t_init_pos, quat=self.t_init_quat, scale=0.5), surface=gs.surfaces.Default(color=(0.6, 0.7, 0.8)),
             material=material
         )
         self.marker = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=self.targ_pos - np.asarray([0.0, 0.0, 0.049]), quat=self.targ_quat, scale=0.5, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 0.0, 0.0)))

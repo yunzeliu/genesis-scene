@@ -5,7 +5,7 @@
 
 int main() {
     std::ifstream infile("T-shape.obj");
-    std::ofstream outfile("T-shape-modified-merged.obj");
+    std::ofstream outfile("T-shape-modified.obj");
     std::string v;
     std::vector<std::tuple<std::string, std::string, std::string>> vertices;
     int index = 1;
