@@ -156,7 +156,7 @@ class TaskEnv:
         # self.hand_link_name = "panda_hand"
         self.franka = self.scene.add_entity(
                 gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml", pos=(0.0, 0.0, 0.1)),
-                material=gs.materials.Rigid(coup_friction=1.0),
+                material=gs.materials.Rigid(coup_friction=0.0, friction=0.01, coup_restitution=0.1, coup_softness=0.02),
             )
         self.hand_link_name = "hand"
 
@@ -173,7 +173,7 @@ class TaskEnv:
         self.t_init_pos = np.array([0.55, -0.05, 0.101])
         self.t_init_quat = np.array([1.0, 0.0, 0.0, 0.0])
 
-        table_material = gs.materials.Rigid(friction=1.0)
+        table_material = gs.materials.Rigid(friction=1.0, coup_friction=0.5)
         self.next_round_wait_step = 50
         if self.material == "rigid":
             material = None
@@ -469,7 +469,7 @@ class TaskEnv:
                 step_threshold = 200
             elif self.reward() < 1.0:
                 step_threshold = 100
-            if abs(initial_combined_dist - new_combined_score) > 0.00001:
+            if abs(initial_combined_dist - new_combined_score) > 0.0001:
               contact_step_count += 1
             if stage == 3 and (contact_step_count > 3) and (stage_step > 25) and new_combined_score >= TaskEnv.combined_dist(last_dpos - 0.0001, last_dquat):
                 self.end_targ_pos[2] = 0.3
