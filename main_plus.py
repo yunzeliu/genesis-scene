@@ -164,13 +164,13 @@ class TaskEnv:
                 gs.morphs.Plane(),
             )
         
-        self.targ_pos = np.array([0.5, -0.05, 0.1])
+        self.targ_pos = np.array([0.5, -0.05, 0.125])
         self.targ_quat = np.array([1.0, 0.0, 0.0, 1.0])
         self.targ_quat /= np.linalg.norm(self.targ_quat)
 
 
         # sample from poffset from [-0.2, 0.2]^2 and quat_offset from [-1, 1]^2
-        self.t_init_pos = np.array([0.55, -0.05, 0.101])
+        self.t_init_pos = np.array([0.55, -0.05, 0.126])
         self.t_init_quat = np.array([1.0, 0.0, 0.0, 0.0])
 
         table_material = gs.materials.Rigid(friction=1.0, coup_friction=0.5)
@@ -189,15 +189,16 @@ class TaskEnv:
                 model="stable_neohookean")
 
         self.t_shape = self.scene.add_entity(
-            gs.morphs.Mesh(force_retet=True, file="T-shape-modified.obj", pos=self.t_init_pos, quat=self.t_init_quat, scale=0.5), surface=gs.surfaces.Default(color=(0.6, 0.7, 0.8)),
+            gs.morphs.Mesh(force_retet=True, file="T-shape-modified.obj", pos=self.t_init_pos, quat=self.t_init_quat, scale=1.0), surface=gs.surfaces.Default(color=(0.6, 0.7, 0.8)),
             material=material
         )
-        self.marker = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=self.targ_pos - np.asarray([0.0, 0.0, 0.049]), quat=self.targ_quat, scale=0.5, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 0.0, 0.0)))
+        self.marker = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=self.targ_pos - np.asarray([0.0, 0.0, 0.0495]), quat=self.targ_quat, scale=1.0, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 0.0, 0.0)))
         self.table = self.scene.add_entity(gs.morphs.Box(size=(2.0, 2.0, 0.1), pos=(0.0, 0.0, 0.05), fixed=True), material=table_material, surface=gs.surfaces.Default(color=(0.8, 0.7, 0.6)))
 
 
         if self.debug_mode:
             self.targ_point = self.scene.add_entity(gs.morphs.Sphere(radius=0.01, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 1.0, 0.0), opacity=0.5))
+            self.current_point = self.scene.add_entity(gs.morphs.Sphere(radius=0.02, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 0.0, 0.0), opacity=0.5))
 
         self.hand_cam = self.scene.add_camera(GUI=False, fov=70, res=(320, 320))
         self.scene_cam = self.scene.add_camera(GUI=False, fov=40, res=(320, 320), pos=(2, 0, 1.5), lookat=(0.0, 0.0, 0.0))
@@ -231,6 +232,84 @@ class TaskEnv:
         )
 
         # franka.control_dofs_position(np.array([0, 0]), fingers_dof) # you can also use position control
+
+
+        self.key_point_poses = [
+            np.array([0.000, 0.055, 0.000]), # 0
+            np.array([0.025, 0.055, 0.000]), # 1
+            np.array([0.050, 0.055, 0.000]), # 2
+            np.array([0.075, 0.055, 0.000]), # 3
+            np.array([0.075, 0.055, 0.000]), # 4
+            np.array([0.075, 0.055, 0.000]), # 5
+            np.array([0.075, 0.030, 0.000]), # 6
+            np.array([0.075, 0.005, 0.000]), # 7
+            np.array([0.075, 0.005, 0.000]), # 8
+            np.array([0.075, 0.005, 0.000]), # 9
+            np.array([0.050, 0.005, 0.000]), # 10
+            np.array([0.025, -0.020, 0.000]), # 11
+            np.array([0.025, -0.045, 0.000]), # 12
+            np.array([0.025, -0.070, 0.000]), # 13
+            np.array([0.025, -0.095, 0.000]), # 14
+            np.array([0.025, -0.095, 0.000]), # 15
+            np.array([0.025, -0.095, 0.000]), # 16
+            np.array([0.000, -0.095, 0.000]), # 17
+            np.array([-0.025, -0.095, 0.000]), # 18
+            np.array([-0.025, -0.095, 0.000]), # 19
+            np.array([-0.025, -0.095, 0.000]), # 20
+            np.array([-0.025, -0.070, 0.000]), # 21
+            np.array([-0.025, -0.045, 0.000]), # 22
+            np.array([-0.025, -0.020, 0.000]), # 23
+            np.array([-0.050, 0.005, 0.000]), # 24
+            np.array([-0.075, 0.005, 0.000]), # 25
+            np.array([-0.075, 0.005, 0.000]), # 26
+            np.array([-0.075, 0.005, 0.000]), # 27
+            np.array([-0.075, 0.030, 0.000]), # 28
+            np.array([-0.075, 0.055, 0.000]), # 29
+            np.array([-0.075, 0.055, 0.000]), # 30
+            np.array([-0.075, 0.055, 0.000]), # 31
+            np.array([-0.050, 0.055, 0.000]), # 32
+            np.array([-0.025, 0.055, 0.000]), # 33
+        ]
+
+        self.key_point_normals = [
+            np.array([0.0, 1.0, 0.0]), # 0
+            np.array([0.0, 1.0, 0.0]), # 1
+            np.array([0.0, 1.0, 0.0]), # 2
+            np.array([0.0, 1.0, 0.0]), # 3
+            np.array([1.0, 1.0, 0.0]), # 4
+            np.array([1.0, 0.0, 0.0]), # 5
+            np.array([1.0, 0.0, 0.0]), # 6
+            np.array([1.0, 0.0, 0.0]), # 7
+            np.array([1.0, -1.0, 0.0]), # 8
+            np.array([0.0, -1.0, 0.0]), # 9
+            np.array([0.0, -1.0, 0.0]), # 10
+            np.array([1.0, 0.0, 0.0]), # 11
+            np.array([1.0, 0.0, 0.0]), # 12
+            np.array([1.0, 0.0, 0.0]), # 13
+            np.array([1.0, 0.0, 0.0]), # 14
+            np.array([1.0, -1.0, 0.0]), # 15
+            np.array([0.0, -1.0, 0.0]), # 16
+            np.array([0.0, -1.0, 0.0]), # 17
+            np.array([0.0, -1.0, 0.0]), # 18
+            np.array([-1.0, -1.0, 0.0]), # 19
+            np.array([-1.0, 0.0, 0.0]), # 20
+            np.array([-1.0, 0.0, 0.0]), # 21
+            np.array([-1.0, 0.0, 0.0]), # 22
+            np.array([-1.0, 0.0, 0.0]), # 23
+            np.array([0.0, -1.0, 0.0]), # 24
+            np.array([0.0, -1.0, 0.0]), # 25
+            np.array([-1.0, -1.0, 0.0]), # 26
+            np.array([-1.0, 0.0, 0.0]), # 27
+            np.array([-1.0, 0.0, 0.0]), # 28
+            np.array([-1.0, 0.0, 0.0]), # 29
+            np.array([-1.0, 1.0, 0.0]), # 30
+            np.array([0.0, 1.0, 0.0]), # 31
+            np.array([0.0, 1.0, 0.0]), # 32
+            np.array([0.0, 1.0, 0.0]), # 33
+        ]
+        
+        for key_point_normals in self.key_point_normals:
+            key_point_normals /= np.linalg.norm(key_point_normals)
 
     def set_pos_quat(self, pos, quat):
         self.scene.reset()
@@ -284,10 +363,10 @@ class TaskEnv:
         quat_offset = np.random.uniform(-1, 1, size=(2,))
         quat_offset /= np.linalg.norm(quat_offset)
 
-        pos=np.array([0.55, -0.05, 0.1]) + np.array([poffset[0] * 0.5, poffset[1], 0.0])
+        pos=np.array([0.55, -0.05, 0.125]) + np.array([poffset[0] * 0.5, poffset[1], 0.0])
         quat=np.array([quat_offset[0], 0.0, 0.0, quat_offset[1]])
 
-        pos = np.array([0.0, 0.0, 0.1])
+        pos = np.array([0.0, 0.0, 0.125])
         quat = np.array([1.0, 0.0, 0.0, 0.0])
 
         self.set_pos_quat(pos, quat)
@@ -334,10 +413,13 @@ class TaskEnv:
         tpos, tquat = self.get_pos_quat()
         R = quat_to_rotmat(tquat)
         targ_R = quat_to_rotmat(self.targ_quat)
-        if self.debug_mode:
-            self.targ_point.set_pos(self.end_targ_pos - [0, 0, 0.11])
 
         self.scene.step()
+        if self.debug_mode:
+            # self.targ_point.set_pos(self.end_targ_pos + [-0.003, -0.004, -0.112])
+            # Get position of end effector
+            eff_pos = self.end_effector.get_pos().cpu().numpy()
+            self.current_point.set_pos(eff_pos + [-0.001, -0.001, -0.103])
         r = self.targ_dist()
         print("targ dist:", r)
         for cam in self.cams:

@@ -164,13 +164,13 @@ class TaskEnv:
                 gs.morphs.Plane(),
             )
         
-        self.targ_pos = np.array([0.5, -0.05, 0.1])
+        self.targ_pos = np.array([0.5, -0.05, 0.125])
         self.targ_quat = np.array([1.0, 0.0, 0.0, 1.0])
         self.targ_quat /= np.linalg.norm(self.targ_quat)
 
 
         # sample from poffset from [-0.2, 0.2]^2 and quat_offset from [-1, 1]^2
-        self.t_init_pos = np.array([0.55, -0.05, 0.101])
+        self.t_init_pos = np.array([0.55, -0.05, 0.126])
         self.t_init_quat = np.array([1.0, 0.0, 0.0, 0.0])
 
         table_material = gs.materials.Rigid(friction=1.0, coup_friction=0.5)
@@ -191,25 +191,25 @@ class TaskEnv:
             material = gs.materials.PBD.Elastic(rho=200, kinetic_friction=1.0, static_friction=1.0)
 
         self.t_shape = self.scene.add_entity(
-            gs.morphs.Mesh(force_retet=True, file="T-shape-modified.obj", pos=self.t_init_pos, quat=self.t_init_quat, scale=0.5), surface=gs.surfaces.Default(color=(0.6, 0.7, 0.8)),
+            gs.morphs.Mesh(force_retet=True, file="T-shape-modified.obj", pos=self.t_init_pos, quat=self.t_init_quat, scale=1.0), surface=gs.surfaces.Default(color=(0.6, 0.7, 0.8)),
             material=material
         )
-        self.marker = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=self.targ_pos - np.asarray([0.0, 0.0, 0.049]), quat=self.targ_quat, scale=0.5, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 0.0, 0.0)))
+        self.marker = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=self.targ_pos - np.asarray([0.0, 0.0, 0.0495]), quat=self.targ_quat, scale=1.0, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 0.0, 0.0)))
         self.table = self.scene.add_entity(gs.morphs.Box(size=(2.0, 2.0, 0.1), pos=(0.0, 0.0, 0.05), fixed=True), material=table_material, surface=gs.surfaces.Default(color=(0.8, 0.7, 0.6)))
 
         self.key_point_poses = [
-            np.array([0.0, 0.055, 0.025]),
-            np.array([0.05, 0.055, 0.025]),
-            np.array([0.075, 0.03, 0.025]),
-            np.array([0.05, 0.005, 0.025]),
-            np.array([0.025, -0.02, 0.025]),
-            np.array([0.025, -0.07, 0.025]),
-            np.array([0.0, -0.095, 0.025]),
-            np.array([-0.025, -0.07, 0.025]),
-            np.array([-0.025, -0.02, 0.025]),
-            np.array([-0.05, 0.005, 0.025]),
-            np.array([-0.075, 0.03, 0.025]),
-            np.array([-0.05, 0.055, 0.025]),
+            np.array([0.0, 0.055, 0.0]),
+            np.array([0.05, 0.055, 0.0]),
+            np.array([0.075, 0.03, 0.0]),
+            np.array([0.05, 0.005, 0.0]),
+            np.array([0.025, -0.02, 0.0]),
+            np.array([0.025, -0.07, 0.0]),
+            np.array([0.0, -0.095, 0.0]),
+            np.array([-0.025, -0.07, 0.0]),
+            np.array([-0.025, -0.02, 0.0]),
+            np.array([-0.05, 0.005, 0.0]),
+            np.array([-0.075, 0.03, 0.0]),
+            np.array([-0.05, 0.055, 0.0]),
         ]
 
         self.key_point_normals = [
@@ -226,6 +226,7 @@ class TaskEnv:
             np.array([-1.0, 0.0, 0.0]),
             np.array([0.0, 1.0, 0.0]),
         ]
+        
         for key_point_normals in self.key_point_normals:
             key_point_normals /= np.linalg.norm(key_point_normals)
 
@@ -325,7 +326,7 @@ class TaskEnv:
         quat_offset = np.random.uniform(-1, 1, size=(2,))
         quat_offset /= np.linalg.norm(quat_offset)
 
-        pos=np.array([0.55, -0.05, 0.1]) + np.array([poffset[0] * 0.5, poffset[1], 0.0])
+        pos=np.array([0.55, -0.05, 0.125]) + np.array([poffset[0] * 0.5, poffset[1], 0.0])
         quat=np.array([quat_offset[0], 0.0, 0.0, quat_offset[1]])
 
         self.set_pos_quat(pos, quat)
