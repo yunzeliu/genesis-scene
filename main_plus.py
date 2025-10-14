@@ -155,7 +155,7 @@ class TaskEnv:
         #     )
         # self.hand_link_name = "panda_hand"
         self.franka = self.scene.add_entity(
-                gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml", pos=(0.0, 0.0, 0.1)),
+                gs.morphs.MJCF(file="xml/franka_emika_panda/panda.xml", pos=(0.0, -0.5, 0.1)),
                 material=gs.materials.Rigid(coup_friction=0.0, friction=0.01, coup_restitution=0.1, coup_softness=0.02),
             )
         self.hand_link_name = "hand"
@@ -187,8 +187,6 @@ class TaskEnv:
                 friction_mu=3.0,
                 hydroelastic_modulus=1e8,
                 model="stable_neohookean")
-        elif self.material == "pbd":
-            material = gs.materials.PBD.Elastic(rho=200, kinetic_friction=1.0, static_friction=1.0)
 
         self.t_shape = self.scene.add_entity(
             gs.morphs.Mesh(force_retet=True, file="T-shape-modified.obj", pos=self.t_init_pos, quat=self.t_init_quat, scale=0.5), surface=gs.surfaces.Default(color=(0.6, 0.7, 0.8)),
@@ -197,47 +195,9 @@ class TaskEnv:
         self.marker = self.scene.add_entity(gs.morphs.Mesh(file = "T-shape-modified.obj", pos=self.targ_pos - np.asarray([0.0, 0.0, 0.049]), quat=self.targ_quat, scale=0.5, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 0.0, 0.0)))
         self.table = self.scene.add_entity(gs.morphs.Box(size=(2.0, 2.0, 0.1), pos=(0.0, 0.0, 0.05), fixed=True), material=table_material, surface=gs.surfaces.Default(color=(0.8, 0.7, 0.6)))
 
-        self.key_point_poses = [
-            np.array([0.0, 0.055, 0.025]),
-            np.array([0.05, 0.055, 0.025]),
-            np.array([0.075, 0.03, 0.025]),
-            np.array([0.05, 0.005, 0.025]),
-            np.array([0.025, -0.02, 0.025]),
-            np.array([0.025, -0.07, 0.025]),
-            np.array([0.0, -0.095, 0.025]),
-            np.array([-0.025, -0.07, 0.025]),
-            np.array([-0.025, -0.02, 0.025]),
-            np.array([-0.05, 0.005, 0.025]),
-            np.array([-0.075, 0.03, 0.025]),
-            np.array([-0.05, 0.055, 0.025]),
-        ]
-
-        self.key_point_normals = [
-            np.array([0.0, 1.0, 0.0]),
-            np.array([0.0, 1.0, 0.0]),
-            np.array([1.0, 0.0, 0.0]),
-            np.array([1.0, -1.0, 0.0]),
-            np.array([1.0, -1.0, 0.0]),
-            np.array([1.0, 0.0, 0.0]),
-            np.array([0.0, -1.0, 0.0]),
-            np.array([-1.0, 0.0, 0.0]),
-            np.array([-1.0, -1.0, 0.0]),
-            np.array([-1.0, -1.0, 0.0]),
-            np.array([-1.0, 0.0, 0.0]),
-            np.array([0.0, 1.0, 0.0]),
-        ]
-        for key_point_normals in self.key_point_normals:
-            key_point_normals /= np.linalg.norm(key_point_normals)
 
         if self.debug_mode:
-            self.key_points = [
-                self.scene.add_entity(gs.morphs.Sphere(radius=0.01, collision=False, fixed=True), surface=gs.surfaces.Default(color=(0.0, 1.0, 0.0), opacity=0.5)) for kp in self.key_point_poses
-            ]
-
-            self.targ_key_points = [
-                self.scene.add_entity(gs.morphs.Sphere(radius=0.01, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 0.0, 0.0), opacity=0.5)) for kp in self.key_point_poses
-            ]
-            self.targ_point = self.scene.add_entity(gs.morphs.Sphere(radius=0.1, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 1.0, 0.0), opacity=0.5))
+            self.targ_point = self.scene.add_entity(gs.morphs.Sphere(radius=0.01, collision=False, fixed=True), surface=gs.surfaces.Default(color=(1.0, 1.0, 0.0), opacity=0.5))
 
         self.hand_cam = self.scene.add_camera(GUI=False, fov=70, res=(320, 320))
         self.scene_cam = self.scene.add_camera(GUI=False, fov=40, res=(320, 320), pos=(2, 0, 1.5), lookat=(0.0, 0.0, 0.0))
@@ -252,6 +212,8 @@ class TaskEnv:
         self.hand_cam.attach(self.franka.get_link("hand"), T)
 
         self.scene.build()
+
+        print(f"{self.t_shape.get_mass_mat()}")
 
         self.motors_dof = np.arange(7)
         self.fingers_dof = np.arange(7, 9)
@@ -299,9 +261,6 @@ class TaskEnv:
             new_particles = relative_particles + pos
             new_particles = np.ascontiguousarray(new_particles)
             self.t_shape.set_position(new_particles)
-        elif self.material == "pbd":
-            scene_state = self.scene.get_state()
-            print("PBD Scene State: ", scene_state.solvers_state[5])
 
 
     def get_pos_quat(self):
@@ -327,6 +286,9 @@ class TaskEnv:
 
         pos=np.array([0.55, -0.05, 0.1]) + np.array([poffset[0] * 0.5, poffset[1], 0.0])
         quat=np.array([quat_offset[0], 0.0, 0.0, quat_offset[1]])
+
+        pos = np.array([0.0, 0.0, 0.1])
+        quat = np.array([1.0, 0.0, 0.0, 0.0])
 
         self.set_pos_quat(pos, quat)
 
@@ -373,10 +335,7 @@ class TaskEnv:
         R = quat_to_rotmat(tquat)
         targ_R = quat_to_rotmat(self.targ_quat)
         if self.debug_mode:
-            for i in range(12):
-                self.key_points[i].set_pos(tpos + R @ self.key_point_poses[i])
-                self.targ_key_points[i].set_pos(self.targ_pos + targ_R @ self.key_point_poses[i])
-            self.targ_point.set_pos(self.end_targ_pos)
+            self.targ_point.set_pos(self.end_targ_pos - [0, 0, 0.11])
 
         self.scene.step()
         r = self.targ_dist()
@@ -395,62 +354,10 @@ class TaskEnv:
         for i in range(30):
             self.step()
 
-        i = 0
-        stage = 0
-        stage_step = 0
         last_dpos, last_dquat = self.targ_dist()
-        initial_combined_dist = 0.0
-
-        contact_step_count = 0
 
         # lift
         while last_dpos > 0.005 or last_dquat > 0.05:
-            if stage == 0:
-                tpos, tquat = self.get_pos_quat()
-                R = quat_to_rotmat(tquat)
-                targ_R = quat_to_rotmat(self.targ_quat)
-                targ_dist = -10000.0
-                sel_targ_key_pos = None
-                sel_cur_key_pos = None
-                for i in range(12):
-                    cur_key_pos = tpos + R @ self.key_point_poses[i]
-                    targ_key_pos = self.targ_pos + targ_R @ self.key_point_poses[i]
-                    normal = R @ self.key_point_normals[i]
-                    dist = np.dot(cur_key_pos - targ_key_pos, normal)
-                    if dist > targ_dist:
-                        targ_dist = dist
-                        sel_targ_key_pos = targ_key_pos
-                        sel_cur_key_pos = cur_key_pos
-                self.push_direction = sel_targ_key_pos - sel_cur_key_pos
-                self.push_direction /= np.linalg.norm(self.push_direction)
-                start_point = sel_cur_key_pos - 0.06 * self.push_direction
-                start_point[2] = 0.3
-                print(f"start_point: {start_point}")
-                self.end_targ_pos = start_point
-                stage = 1
-                stage_step = 0
-            elif stage == 1:
-                if stage_step == 50:
-                    self.end_targ_pos[2] = 0.245
-                    stage = 2
-                    stage_step = 0
-            elif stage == 2:
-                if stage_step == 50:
-                    stage = 3
-                    stage_step = 0
-                    contact_step_count = 0
-                    initial_combined_dist = TaskEnv.combined_dist(last_dpos, last_dquat)
-            elif stage == 3:
-                if self.reward() < 0.1 and stage_step > 13:
-                    self.end_targ_pos += 0.0003 * self.push_direction
-                elif self.reward() < 1.0 and stage_step > 13:
-                    self.end_targ_pos += 0.001 * self.push_direction
-                else:
-                    self.end_targ_pos += 0.005 * self.push_direction
-            elif stage == 4:
-                if stage_step == self.next_round_wait_step:
-                    stage = 0
-                    stage_step = 0
             qpos = self.franka.inverse_kinematics(
                 link=self.end_effector,
                 pos=self.end_targ_pos,
@@ -458,31 +365,12 @@ class TaskEnv:
             )
             self.franka.control_dofs_position(qpos[:-2], self.motors_dof)
             self.step()
-            i += 1
-            stage_step += 1
-
+            
             new_dpos, new_dquat = self.targ_dist()
             new_combined_score = TaskEnv.combined_dist(new_dpos, new_dquat)
 
-            step_threshold = 50
-            if self.reward() < 0.2:
-                step_threshold = 200
-            elif self.reward() < 1.0:
-                step_threshold = 100
-            if abs(initial_combined_dist - new_combined_score) > 0.0001:
-              contact_step_count += 1
-            if stage == 3 and (contact_step_count > 3) and (stage_step > 25) and new_combined_score >= TaskEnv.combined_dist(last_dpos - 0.0001, last_dquat):
-                self.end_targ_pos[2] = 0.3
-                self.end_targ_pos -= self.push_direction * 0.03
-                stage = 4
-                stage_step = 0
-                contact_step_count = 0
-
-
-
             last_dpos, last_dquat = new_dpos, new_dquat
-            print(f"stage: {stage}, step: {stage_step}, reward: {self.reward()}")
-
+            
 
         self.end_targ_pos[2] = 0.3
         self.end_targ_pos -= self.push_direction * 0.1
@@ -517,7 +405,7 @@ class TaskEnv:
 def main():
     # make dir data/ is not exists
     gs.init(backend=gs.gpu)
-    env = TaskEnv(debug_mode=False, material="rigid")
+    env = TaskEnv(debug_mode=True, material="rigid")
     for seed in range(100):
         env.run(seed=seed)
 
