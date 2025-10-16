@@ -127,13 +127,13 @@ class TaskEnv:
                     substeps=50,
                 ),
                 vis_options=gs.options.VisOptions(
-                    visualize_mpm_boundary=self.debug_mode
+                    visualize_mpm_boundary=False  # Disable MPM boundary visualization
                 ),
                 viewer_options=gs.options.ViewerOptions(
                     camera_pos=(3, -1, 1.5),
                     camera_lookat=(0.0, 0.0, 0.0),
                     camera_fov=30,
-                    max_FPS=60,
+                    max_FPS=60
                 ),
                 mpm_options=gs.options.MPMOptions(
                     lower_bound=(0.0, -0.5, 0.0),
@@ -146,7 +146,7 @@ class TaskEnv:
                 pbd_options=gs.options.PBDOptions(
                     particle_size=0.003,
                 ),
-                show_viewer=True
+                show_viewer=False
             )
 
         # self.franka = self.scene.add_entity(
