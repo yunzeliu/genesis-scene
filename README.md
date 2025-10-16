@@ -1,5 +1,7 @@
 # Genesis Push-T: Robot Manipulation Trajectory Learning
 
+##TODO:实现一个评估脚本，能够评估训练出的模型的性能。目前4.中的evaluate_rollout.py还不可用，需要额外effort或者重写评估框架。
+
 本项目实现了基于dp的机器人操作轨迹学习系统。包含轨迹生成、数据处理、模型训练和评估等完整流程。
 
 ## 项目结构
